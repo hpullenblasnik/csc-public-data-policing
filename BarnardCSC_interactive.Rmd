@@ -1,0 +1,360 @@
+---
+title: "What Does Data 'See'? Public Data, Bias, and Surveillance in NYC"
+author: "Hannah Pullen-Blasnik"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+QUESTIONS
+
+This workshop will teach you how to access and think through the biases in public data. How do we use data critically to understand what it can show, where its limitations are, and how it may not necessarily be as neutral or objective as it is often perceived to be? You will:
+
+1. Understand how social scientists might use quantitative data
+2. Gain familiarity with public data on New York City using R
+3. Think about data’s potential biases
+4. Explore how researchers and organizations push back against urban surveillance with data
+
+For the coding portion of this session, we will walk through downloading and exploring data
+on the demographics of NYC, policing stops, and the location of surveillance cameras as 
+provided by the Decode Surveillance project at Amnesty International: https://banthescan.amnesty.org/decode/ 
+
+The coding portion assumes some prior familiarity with coding in R. If you do not have experience in R, you may want to work with others that do for the coding portion of this presentation.
+
+This session is led by Hannah Pullen-Blasnik, PhD Candidate in Sociology at Columbia University.
+
+Please send any questions or comments to Hannah Pullen-Blasnik at hannah.pullen-blasnik@columbia.edu.
+
+# Coding Activity: Census Data, Policing Data, and Surveillance
+
+#### Importing Libraries
+
+We will use packages like tidyverse for organizing our data, ggplot2 for creating charts, and sf for mapping.
+
+```{r}
+# install.packages("tidyverse", "ggplot2")
+library(tidyverse)
+library(ggplot2)
+library(sf)
+library(RSocrata)
+library(tidycensus)
+library(units)
+
+options(scipen=999)
+```
+
+
+## Census Data - City Demographics
+
+### Data Download - Using APIs
+
+We'll download data from the Census Bureau to get demographic information about New York City.
+
+To do so, we'll use the package tidycensus and a Census API key. APIs are a common way to access publicly available data. If you don't have a Census API key, you'll have to create one: https://api.census.gov/data/key_signup.html 
+
+If you cannot or do not want to create an API key, you can instead skip down to the visualizing census data section and load the acs_clean.csv, skipping the API call and cleaning steps below.
+
+```{r}
+### Run this line if you just got a new API key: 
+census_api_key("YOUR API KEY HERE", install = T)
+```
+
+```{r}
+# If you already have an API key installed, all you need to run is:
+# census_api_key(Sys.getenv("CENSUS_API_KEY"))
+```
+
+
+Now that we have our credentials we can look at what variables are available. There are many more variables available from the census website, but not all are made available through this R package. For today, we'll stick to a few that we have easy access to. For more exploration of Census data, visit their website: https://data.census.gov/ 
+
+We're going to download 5-year ACS (American Community Survey) data for 2019 (2015-2019) at the tract level. To view what variables are available, use the load_variables() function from tidycensus.
+
+```{r}
+v19 <- load_variables(2019, "acs5", cache = TRUE)
+```
+
+
+We're interested in ACS data from NY state for the 5 counties in NYC ("061", "047", "081", "005", "085"). We want:
+
+- Total population
+- Racial composition (for white, Black, Latino, Asian) 
+  - Note that there are many different racial groupings provided by the census. We need the one that includes whether they are Hispanic or Latino
+- Gender composition (male, female)
+- Median household income
+
+```{r}
+acs <- get_acs(geography="tract", 
+               state="NY", 
+               county=c("061", "047", "081", "005", "085"), 
+               year=2019,
+               variables=c(med_inc="B19013_001", 
+                           total_pop='B01003_001', 
+                           white="B03002_003", 
+                           black="B03002_004", 
+                           asian="B03002_006", 
+                           latino="B03002_012",
+                           male='B01001_002', 
+                           female='B01001_026'))
+```
+
+**Note**: How do the categories provided by the census constrain our analyses? Who might be getting left out or miscategorized?
+
+
+If you did not get an API key, you can instead load the data from the following CSV:
+
+```{r}
+acs <- read_csv("data/acs.csv") %>% mutate(GEOID=as.character(GEOID))
+```
+
+### Data Exploration
+
+Once we have the data downloaded, we can begin to explore its contents. Start by viewing the table contents with head()
+
+```{r}
+
+```
+
+We can see that what we get from this API lists all the variables in one column, "variable", and then for each provides the estimated value (estimate) and the margin of error for that esimate (moe).
+
+For our purposes, we'll be working with the estimated value column, but it's good to note that these are estimated values and so have some uncertainty in the value. We can recognize this from the name -- the American Community Survey -- and know that this data is survey responses that represent the total population. This is one of the most comprehensive surveys in the country.
+
+This format is not the best for what we want to do with the data. We'd like to pivot the table so that each row is one census tract, and there are columns for all the values. Use pivot_wider() with GEOID and NAME as id_cols, taking the names from the variable column and the values from the estimate column. Since we're not going to look at the margin of error in this analysis, we can ignore it.
+
+```{r}
+
+```
+
+
+**Bonus**: We can also use mutate() to create some new columns:
+
+- estimate the population that would fall into an "other race" category by subtracting the sum of the race columns (black, white, latino, and asian) from total_pop
+- pull out the county/borough from NAME using str_detect() and a case_when() statement. We want to look for where NAME contains "Bronx", "Kings", "Queens", "New York County", and "Richmond" and code them to "Bronx", "Brooklyn", "Queens", "Manhattan", and "Staten Island", respectively
+- determine the most prevalent racial group for each census tract. This one is a little tricky and there are a few ways to do this. One is to identify which of the race columns has the largest value using pmax() and then use a case_when() to identify which of the columns is equal to the maximum value for that row
+
+```{r}
+
+```
+
+
+### Demographic Visuals
+
+Now that we've got our demographic data into a more usable format, let's create some visuals.
+
+Using ggplot() on our dataframe, create a bar graph (geom_bar()) of the most prevalent racial groups
+
+```{r}
+
+```
+
+We can also make a bar graph of the population in each county. Since we want to count the people this time, instead of the census tracts, we need to set weight=total_pop
+
+```{r}
+
+```
+
+**Bonus**: Graph the population by race by county
+
+```{r}
+
+```
+
+
+### Geographic Data
+
+Another way we might want to visualize our data is on a map of the city. In order to do so, we need to download a file that tells R where the census tracts are located geographically. You can download this data from the Census website, and often you've been able to use the tigris package in R to download similarly to how we did for the ACS data. However, recently that API has gone down. I've provided the relevant tract shapefile in the data/ folder, so we have load it in using read_sf()
+
+```{r}
+nyc_tracts <- read_sf( "data/tracts.shp")
+```
+
+View the data with head()
+
+```{r}
+
+```
+
+
+Once we have our spatial data, we can use a left_join to add our ACS demographic data based on the GEOID.
+
+```{r}
+
+```
+
+
+### Mapping Demographics
+
+We're going to map our data using ggplot() and geom_sf(). 
+
+Let's look at racial composition of the city. We'll use that most prevalent race column that we created earlier to color the tracts based on which racial group is the most prevalent in that area.
+
+**Bonus**: The tract boundaries are outlined by default, but it can look a little murky. Set color=NA in geom_sf() to remove them.
+
+```{r}
+
+```
+This map shows very clear racial boundaries across the city.
+
+**Bonus**: Map med_income
+
+```{r}
+
+```
+
+
+**Bonus**: We can also look at the population to see where people live in NYC. While most census tracts aim to have around 4k residents per tract, some are extreme outliers. We can see that by looking at a summary of the total_pop column
+
+```{r}
+
+```
+
+For our map, we'll cap the population at a maximum of 10k in the color scale so that we still see some variation across the city. We can do that using pmin(total_pop, 10000) to get the smaller value. We might also want to set very low population tracts (like parks) to NA. Together, we can accomplish both by setting fill=ifelse(total_pop > 250, pmin(total_pop, 10000), NA)).
+
+```{r}
+
+```
+
+## NYPD Stops
+
+Now that we've explored the demographic data about New York City, let's compare this to some data on policing patterns.
+
+The following data contains records for every stop conducted by the NYPD during 
+2019 and 2020. These data can be found from the NYC Open Data Portal: 
+https://data.cityofnewyork.us/Public-Safety/The-Stop-Question-and-Frisk-Data/ftxv-d5ix/about_data 
+
+Unfortunately, it is not in a database format and so needs to be downloaded manually by year.
+I have already done this for you and provided a CSV.
+
+```{r}
+sqf <- read_csv("data/sqf.csv")
+```
+
+View the data with head()
+
+```{r}
+
+```
+
+
+Consider:
+
+- What biases might be present in this data?
+- Why was this data collected?
+
+
+Let's make the racial groups here align with the ones we're using for the Census (White, Black, Latino, Asian, Other)
+
+```{r}
+
+```
+
+How does a bar graph of the racial groups look for this data? 
+How does that compare to the ones we made earlier of the city's demographics?
+
+```{r}
+
+```
+
+We can see this pattern even more clearly through mapping the stop locations.
+
+First we need to provide information about which columns tell us the stop locations.
+
+```{r}
+sqf_geo <- st_as_sf(sqf, coords=c('STOP_LOCATION_X','STOP_LOCATION_Y'), crs='epsg:2908', remove=FALSE)
+```
+
+
+Then, we can map the stops by the race of the person stopped. We'll map the census tracts file as a base layer, and then plot points for each stop on top of the tracts. Fill in the blanks below.
+
+```{r}
+ggplot() + 
+  geom_sf(data=_______, fill="gray80") +
+  geom_sf(data=_______, aes(col=_____), alpha=.2, size=1) +
+  guides(colour = guide_legend(override.aes=list(alpha=1, size=10))) +
+  ggtitle('Stop & Frisk By Race') +
+  theme_bw(base_size=16)
+```
+
+How can we see a racial bias in the people stopped by police compared to the city's population?
+
+
+## Surveillance - Camera Locations
+
+We'll also load in Camera locations data collected by Amnesty International. Here we only need it at the census tract level, not at the individual camera level, so we'll load in their aggregated file that counts how many cameras are in each census tract.
+
+This analysis only looks at public cameras.
+
+The code to generate this data and analysis can be found at Amnesty's github (https://github.com/amnesty-crisis-evidence-lab/decode-surveillance-nyc), but it's included here for convenience. The columns here have been calculated by the Decode Surveillance team, and are already aggregated to the census tract level. They include:
+
+- cameras: the count of public cameras in the census tract
+- cameras_within_200m: the count of public cameras within the tract or within 200m of the tract's boundaries (as they may also capture images within the tract)
+- eff_cameras: Count of "effective cameras," or the estimated coverage of public cameras accounting for the fact that some cameras cover overlapping areas and so do not contribute new information/surveillance to those areas
+- eff_cameras_within_200m: "Effective cameras" in and within 200m of the census tract's boundaries
+
+
+```{r}
+cameras <- read_csv("data/camera_count.csv")
+```
+
+View the data
+
+```{r}
+
+```
+
+
+And add it onto our main dataframe by GEOID (we may need to change GEOID in the camera dataset to a character/string using as.character())
+
+```{r}
+
+```
+
+
+Finally, let's map effective cameras (eff_cameras_within_200m) across the city:
+
+```{r}
+
+```
+
+
+- What patterns do you see?
+- What future analyses might you want to do with these data sources?
+
+
+#### Additional: Getting to a finalized dataset
+
+We'd need to aggregate our stops data to the census tract level and add it onto our main dataframe.
+
+This data is currently at the incident level, but we may need it at the tract level if we want to analyze it. Let's group by GEOID and count the number of stops and the number of black people stopped.
+
+```{r}
+
+```
+
+We can then add it onto our dataframe
+
+```{r}
+
+```
+
+Calculate stop rates and surveillance rates per 1000 residents (where total_pop > 250, otherwise NA). Create a surveillance ranking from the highest to lowest surveillance rate, and create a variable that separates the top 50 ranked tracts from all other tracts.
+
+```{r}
+
+```
+
+
+We can now map the number of stops (or number of stops for black people) in a tract
+
+```{r}
+
+```
+
+Map the top 50 vs. other tracts
+
+```{r}
+
+```
+
+
+

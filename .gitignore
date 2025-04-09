@@ -5,6 +5,7 @@
 # Session Data files
 .RData
 .RDataTmp
+.DS_Store
 
 # User-specific files
 .Ruserdata
@@ -35,6 +36,7 @@ vignettes/*.pdf
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+*.nb.html
 
 # R Environment Variables
 .Renviron
